@@ -6,3 +6,4 @@ tf-keras
 tensorflow
 numpy
 ultralytics
+gdown
