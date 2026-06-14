@@ -29,6 +29,7 @@ class Detection:
     def __init__(self):
         deploy = "/app/resources/detection_model/deploy.prototxt"
         caffemodel = "/app/resources/detection_model/res10_300x300_ssd_iter_140000.caffemodel"
+
         self.detector = cv2.dnn.readNetFromCaffe(deploy, caffemodel)
         self.detector_confidence = 0.6
 
