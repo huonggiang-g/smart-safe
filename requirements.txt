@@ -3,7 +3,5 @@ uvicorn
 gunicorn
 opencv-python-headless
 ultralytics
-deepface
-scipy
-tf-keras
 numpy
+python-multipart
