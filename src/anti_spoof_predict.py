@@ -1,16 +1,10 @@
 # -*- coding: utf-8 -*-
-# @Time : 20-6-9 上午10:20
-# @Author : zhuying
-# @Company : Minivision
-# @File : anti_spoof_predict.py
-# @Software : PyCharm
 import os
 import cv2
 import math
 import torch
 import numpy as np
 import torch.nn.functional as F
-
 
 from src.model_lib.MiniFASNet import MiniFASNetV1, MiniFASNetV2,MiniFASNetV1SE,MiniFASNetV2SE
 from src.data_io import transform as trans
@@ -23,18 +17,20 @@ MODEL_MAPPING = {
     'MiniFASNetV2SE':MiniFASNetV2SE
 }
 
-
 class Detection:
     def __init__(self):
-        deploy = "/app/resources/detection_model/deploy.prototxt"
-        caffemodel = "/app/resources/detection_model/res10_300x300_ssd_iter_140000.caffemodel"
-        if not os.path.exists(deploy) or not os.path.exists(caffemodel):
-        print(f"LỖI: Không tìm thấy file tại {deploy} hoặc {caffemodel}")
-        # In ra danh sách file trong thư mục để bạn biết tên file thật sự là gì
-        if os.path.exists("/app/resources/detection_model/"):
-        print("Danh sách file trong thư mục:", os.listdir("/app/resources/detection_model/"))
-        raise FileNotFoundError("Check your file paths!")
-        self.detector = cv2.dnn.readNetFromCaffe(deploy, caffemodel)
+        # Đường dẫn tuyệt đối chuẩn xác
+        self.deploy = "/app/resources/detection_model/deploy.prototxt"
+        self.caffemodel = "/app/resources/detection_model/Widerface-RetinaFace.caffemodel"
+        
+        # Kiểm tra file
+        if not os.path.exists(self.deploy) or not os.path.exists(self.caffemodel):
+            print(f"LỖI: Không tìm thấy file tại {self.deploy} hoặc {self.caffemodel}")
+            if os.path.exists("/app/resources/detection_model/"):
+                print("Danh sách file hiện có:", os.listdir("/app/resources/detection_model/"))
+            raise FileNotFoundError("Check your file paths!")
+            
+        self.detector = cv2.dnn.readNetFromCaffe(self.deploy, self.caffemodel)
         self.detector_confidence = 0.6
 
     def get_bbox(self, img):
@@ -48,27 +44,28 @@ class Detection:
         blob = cv2.dnn.blobFromImage(img, 1, mean=(104, 117, 123))
         self.detector.setInput(blob, 'data')
         out = self.detector.forward('detection_out').squeeze()
+        
+        # Xử lý trường hợp out chỉ có 1 chiều (1 detection)
+        if len(out.shape) == 1:
+            out = np.expand_dims(out, axis=0)
+            
         max_conf_index = np.argmax(out[:, 2])
         left, top, right, bottom = out[max_conf_index, 3]*width, out[max_conf_index, 4]*height, \
                                    out[max_conf_index, 5]*width, out[max_conf_index, 6]*height
         bbox = [int(left), int(top), int(right-left+1), int(bottom-top+1)]
         return bbox
 
-
 class AntiSpoofPredict(Detection):
-    def __init__(self, device_id):
+    def __init__(self, device_id=-1):
         super(AntiSpoofPredict, self).__init__()
-        self.device = torch.device("cuda:{}".format(device_id)
-                                   if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:{}".format(device_id) if torch.cuda.is_available() else "cpu")
 
     def _load_model(self, model_path):
-        # define model
         model_name = os.path.basename(model_path)
         h_input, w_input, model_type, _ = parse_model_name(model_name)
-        self.kernel_size = get_kernel(h_input, w_input,)
+        self.kernel_size = get_kernel(h_input, w_input)
         self.model = MODEL_MAPPING[model_type](conv6_kernel=self.kernel_size).to(self.device)
 
-        # load model weight
         state_dict = torch.load(model_path, map_location=self.device)
         keys = iter(state_dict)
         first_layer_name = keys.__next__()
@@ -81,28 +78,14 @@ class AntiSpoofPredict(Detection):
             self.model.load_state_dict(new_state_dict)
         else:
             self.model.load_state_dict(state_dict)
-        return None
 
     def predict(self, img, model_path):
-        test_transform = trans.Compose([
-            trans.ToTensor(),
-        ])
+        test_transform = trans.Compose([trans.ToTensor()])
         img = test_transform(img)
         img = img.unsqueeze(0).to(self.device)
         self._load_model(model_path)
         self.model.eval()
         with torch.no_grad():
             result = self.model.forward(img)
-            result = F.softmax(result).cpu().numpy()
+            result = F.softmax(result, dim=1).cpu().numpy()
         return result
-
-
-
-
-
-
-
-
-
-
-
