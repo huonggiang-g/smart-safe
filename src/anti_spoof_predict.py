@@ -4,7 +4,6 @@
 # @Company : Minivision
 # @File : anti_spoof_predict.py
 # @Software : PyCharm
-
 import os
 import cv2
 import math
@@ -29,7 +28,12 @@ class Detection:
     def __init__(self):
         deploy = "/app/resources/detection_model/deploy.prototxt"
         caffemodel = "/app/resources/detection_model/res10_300x300_ssd_iter_140000.caffemodel"
-
+        if not os.path.exists(deploy) or not os.path.exists(caffemodel):
+        print(f"LỖI: Không tìm thấy file tại {deploy} hoặc {caffemodel}")
+        # In ra danh sách file trong thư mục để bạn biết tên file thật sự là gì
+        if os.path.exists("/app/resources/detection_model/"):
+        print("Danh sách file trong thư mục:", os.listdir("/app/resources/detection_model/"))
+        raise FileNotFoundError("Check your file paths!")
         self.detector = cv2.dnn.readNetFromCaffe(deploy, caffemodel)
         self.detector_confidence = 0.6
 
