@@ -1,98 +1,53 @@
+import os
+import requests
 import cv2
 import numpy as np
-import base64
-import requests
-import os
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, UploadFile, File
 from ultralytics import YOLO
-from deepface import DeepFace
-from scipy.spatial.distance import cosine
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
 
-print("--- KIỂM TRA THƯ MỤC ---")
-# Liệt kê tất cả file trong thư mục model để xem nó thực sự tên là gì
-model_dir = "/app/resources/detection_model/"
-if os.path.exists(model_dir):
-    print("Các file có trong thư mục:", os.listdir(model_dir))
-else:
-    print("Thư mục detection_model không tồn tại!")
 app = FastAPI()
 
-# Cấu hình
-THRESHOLD_FACENET = 0.35
-THRESHOLD_FAS = 0.85
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# 1. TỰ ĐỘNG TẢI MÔ HÌNH (GỌI MỘT LẦN KHI KHỞI ĐỘNG)
+def download_model(file_id, dest):
+    if not os.path.exists(dest):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        with open(dest, "wb") as f:
+            f.write(requests.get(url).content)
 
-# Load models
-os.environ["OMP_NUM_THREADS"] = "1"
-yolo_pose = YOLO('best.pt')
+download_model("1IK7hqsybAQ0i7k8cA0HRrtUYk3eZe5O8", "/app/resources/detection_model/best.pt")
+download_model("1pBCQntSyUsnuRBrKCsFTUMLFq1JrW_wL", "/app/resources/facenet512.h5")
+# BẠN ĐIỀN ID CỦA FILE MINI-FAS-NET VÀO ĐÂY
+download_model("ID_FILE_MINI_FAS_NET", "/app/resources/anti_spoof_models/2.7_80x80_MiniFASNetV2.pth")
+
+# 2. KHỞI TẠO AI (GLOBAL)
+yolo_pose = YOLO('/app/resources/detection_model/best.pt')
 fas_predict = AntiSpoofPredict(device_id=-1)
 image_cropper = CropImage()
 
-known_faces_db = {}
-
-def load_db_from_supabase():
-    global known_faces_db
-    try:
-        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
-        response = requests.get(f"{SUPABASE_URL}/rest/v1/accounts?select=full_name,face_vector", headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            for item in data:
-                if item.get('face_vector'):
-                    vec = np.array(item['face_vector'])
-                    known_faces_db[item['full_name']] = [vec]
-            print(f"[INFO] Đã nạp {len(known_faces_db)} người thành công")
-    except Exception as e:
-        print(f"[ERROR] Lỗi nạp DB: {e}")
-
-load_db_from_supabase()
-
-@app.post("/recognize")
-async def recognize(request: Request):
-    try:
-        data = await request.json()
-        img_bytes = base64.b64decode(data['image'])
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        results = yolo_pose(frame, verbose=False)
-        for result in results:
-            for box in result.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
+@app.post("/predict")
+async def predict_face(file: UploadFile = File(...)):
+    # Đọc ảnh từ ESP32 gửi lên
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    # Logic nhận diện (Trích xuất từ main.py của bạn)
+    results = yolo_pose(frame, verbose=False)
+    for result in results:
+        for box in result.boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            
+            # Kiểm tra FAS
+            img_crop_fas = image_cropper.crop(frame, [x1, y1, x2-x1, y2-y1], 2.7, 80, 80)
+            pred = fas_predict.predict(img_crop_fas, "/app/resources/anti_spoof_models/2.7_80x80_MiniFASNetV2.pth")
+            
+            # Kết quả (ví dụ: pred[0][1] > 0.85 là Real)
+            if pred[0][1] > 0.85:
+                return {"status": "real", "message": "Khuôn mặt hợp lệ"}
+            else:
+                return {"status": "spoof", "message": "Phát hiện giả mạo!"}
                 
-                # Anti-Spoofing
-                img_crop_fas = image_cropper.crop(frame, [x1, y1, x2-x1, y2-y1], 2.7, 80, 80)
-                pred = fas_predict.predict(img_crop_fas, "resources/anti_spoof_models/2.7_80x80_MiniFASNetV2.pth")
-                if pred[0][1] < THRESHOLD_FAS:
-                    return {"recognized": False, "message": "SPOOF"}
-
-                # FaceNet512
-                face_crop = frame[max(0, y1):y2, max(0, x1):x2]
-                res = DeepFace.represent(img_path=face_crop, model_name="Facenet512", detector_backend="skip", enforce_detection=False)
-                if not res or 'embedding' not in res[0]: continue
-                
-                current_vec = np.array(res[0]["embedding"])
-
-                # So sánh
-                best_name, min_dist = "Unknown", 1.0
-                for name, vecs in known_faces_db.items():
-                    for v in vecs:
-                        dist = cosine(current_vec, v)
-                        if dist < min_dist:
-                            min_dist, best_name = dist, name
-                
-                if min_dist < THRESHOLD_FACENET:
-                    return {"recognized": True, "name": best_name, "dist": float(min_dist)}
-
-        return {"recognized": False, "name": "Unknown"}
-    except Exception as e:
-        return {"error": str(e)}
-
-# --- ĐÂY LÀ PHẦN SỬA ĐỂ RENDER NHẬN ĐƯỢC PORT ---
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    return {"status": "no_face", "message": "Không tìm thấy khuôn mặt"}
