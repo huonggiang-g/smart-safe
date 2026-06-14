@@ -19,6 +19,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # Load models
+os.environ["OMP_NUM_THREADS"] = "1"
 yolo_pose = YOLO('best.pt')
 fas_predict = AntiSpoofPredict(device_id=-1)
 image_cropper = CropImage()
