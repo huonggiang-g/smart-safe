@@ -10,6 +10,13 @@ from scipy.spatial.distance import cosine
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
 
+print("--- KIỂM TRA THƯ MỤC ---")
+# Liệt kê tất cả file trong thư mục model để xem nó thực sự tên là gì
+model_dir = "/app/resources/detection_model/"
+if os.path.exists(model_dir):
+    print("Các file có trong thư mục:", os.listdir(model_dir))
+else:
+    print("Thư mục detection_model không tồn tại!")
 app = FastAPI()
 
 # Cấu hình
