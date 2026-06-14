@@ -1,21 +1,22 @@
-# Sử dụng phiên bản Python nhẹ
+# 1. Dùng bản python nhẹ để tiết kiệm dung lượng
 FROM python:3.9-slim
 
-# Thiết lập thư mục làm việc
+# 2. Thiết lập thư mục làm việc
 WORKDIR /app
 
-# Cập nhật để cài đặt thư viện thay thế (libgl1 thay vì libgl1-mesa-glx)
+# 3. Cài đặt các thư viện hệ thống cần thiết cho OpenCV và AI
 RUN apt-get update && apt-get install -y \
-    libgl1 \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
-    
-# Copy requirements và cài đặt
+
+# 4. Copy file requirements trước để tận dụng cache (tăng tốc độ build)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy toàn bộ code và model
+# 5. Copy toàn bộ code vào container
 COPY . .
 
-# Chạy ứng dụng
-CMD ["uvicorn", "app_ai:app", "--host", "0.0.0.0", "--port", "10000"]
+# 6. Dòng này quan trọng nhất: Render tự cấp biến $PORT, 
+# Docker sẽ dùng nó để chạy app đúng cổng mà Render yêu cầu
+CMD uvicorn app_ai:app --host 0.0.0.0 --port $PORT
