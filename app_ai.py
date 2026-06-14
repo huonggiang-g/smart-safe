@@ -32,10 +32,8 @@ def load_db_from_supabase():
         response = requests.get(f"{SUPABASE_URL}/rest/v1/accounts?select=full_name,face_vector", headers=headers)
         if response.status_code == 200:
             data = response.json()
-            # BỔ SUNG: Kiểm tra dữ liệu vector trước khi nạp
             for item in data:
                 if item.get('face_vector'):
-                    # Chuyển đổi chuỗi vector từ DB thành numpy array
                     vec = np.array(item['face_vector'])
                     known_faces_db[item['full_name']] = [vec]
             print(f"[INFO] Đã nạp {len(known_faces_db)} người thành công")
@@ -84,3 +82,9 @@ async def recognize(request: Request):
         return {"recognized": False, "name": "Unknown"}
     except Exception as e:
         return {"error": str(e)}
+
+# --- ĐÂY LÀ PHẦN SỬA ĐỂ RENDER NHẬN ĐƯỢC PORT ---
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
