@@ -14,12 +14,14 @@ def download_model(file_id, dest):
     if not os.path.exists(dest):
         print(f"Đang nạp model: {dest}...")
         os.makedirs(os.path.dirname(dest), exist_ok=True)
-        url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        # Thêm tham số confirm=t để bỏ qua cảnh báo quét virus của Google Drive
+        url = f"https://drive.google.com/uc?export=download&confirm=t&id={file_id}"
         response = requests.get(url)
         with open(dest, "wb") as f:
             f.write(response.content)
         print("Nạp thành công!")
-
+        file_size = os.path.getsize("/app/resources/detection_model/best.pt")
+        print(f"Kích thước file best.pt hiện tại là: {file_size} bytes")
 # Tải bộ 3 mô hình
 download_model("1IK7hqsybAQ0i7k8cA0HRrtUYk3eZe5O8", "/app/resources/detection_model/best.pt")
 download_model("1pBCQntSyUsnuRBrKCsFTUMLFq1JrW_wL", "/app/resources/facenet512.h5")
