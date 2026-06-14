@@ -1,7 +1,9 @@
 fastapi
-uvicorn[standard]
-ultralytics
+uvicorn
+gunicorn
 opencv-python-headless
-gdown
-scipy
+ultralytics
 deepface
+scipy
+tf-keras
+numpy
