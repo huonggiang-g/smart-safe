@@ -1,10 +1,7 @@
 fastapi
 uvicorn
-gunicorn
-opencv-python-headless
 ultralytics
-numpy
-pydantic
 deepface
-tf-keras
-tensorflow-cpu
+opencv-python-headless
+scipy
+supabase
