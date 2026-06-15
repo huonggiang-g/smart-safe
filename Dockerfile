@@ -1,30 +1,19 @@
-# Sử dụng Python 3.9 slim để nhẹ image
 FROM python:3.9-slim
 
-# Cài đặt các dependencies hệ thống cần thiết cho OpenCV và DeepFace
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Thiết lập thư mục làm việc
 WORKDIR /app
-
-# Copy các file từ repo vào container
 COPY . .
 
-# Cấp quyền chạy script và tải các mô hình từ Google Drive
-RUN chmod +x download_models.sh && ./download_models.sh
-
-# Cài đặt các gói Python
+# Ép buộc cài đặt lại tất cả dependencies
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Mở port 8000 cho Render
-EXPOSE 8000
+RUN chmod +x download_models.sh && ./download_models.sh
 
-# Khởi chạy ứng dụng bằng Gunicorn
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "app_ai:app", "--bind", "0.0.0.0:8000"]
+EXPOSE 8000
+CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "app_ai:app", "--bind", "0.0.0.0:8000", "--timeout", "300"]
