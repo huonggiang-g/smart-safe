@@ -8,28 +8,20 @@ from ultralytics import YOLO
 from deepface import DeepFace
 from scipy.spatial.distance import cosine
 from supabase import create_client
-
-# Import các module từ dự án của bạn
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
 
-# Khởi tạo FastAPI
 app = FastAPI()
 
-# 1. CẤU HÌNH BIẾN MÔI TRƯỜNG & SUPABASE
-# Hãy đảm bảo bạn đã thêm SUPABASE_URL và SUPABASE_KEY vào mục Environment trên Render
+# Kết nối Supabase (Lấy thông tin từ Dashboard Render)
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
-# 2. KHỞI TẠO MÔ HÌNH (Singleton - Nạp 1 lần duy nhất)
-print("[INFO] Đang nạp model và kết nối Database...")
-MODEL_YOLO = 'models/best.pt'
-MODEL_FAS = 'models/2.7_80x80_MiniFASNetV2.pth'
-THRESHOLD_FACENET = 0.35 
-
-yolo_pose = YOLO(MODEL_YOLO)
+# Khởi tạo mô hình
+print("[INFO] Đang nạp model...")
+yolo_pose = YOLO('models/best.pt')
 fas_predict = AntiSpoofPredict(device_id=-1)
 image_cropper = CropImage()
-print("[INFO] Khởi tạo hoàn tất, sẵn sàng nhận request!")
+print("[INFO] Khởi tạo hoàn tất!")
 
 class ImageRequest(BaseModel):
     image: str
@@ -37,11 +29,11 @@ class ImageRequest(BaseModel):
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
     try:
-        # A. Xử lý ảnh đầu vào
+        # Xử lý ảnh
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
         nparr = np.frombuffer(img_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
+        
         if frame is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
 
@@ -57,35 +49,21 @@ async def recognize(request: ImageRequest):
                 
                 if float(pred[0][1]) < 0.85:
                     return {"recognized": False, "detected": True, "error": "Spoof detected"}
-
-                # D. DeepFace lấy vector (skip detector vì đã có YOLO)
-                face_crop = frame[max(0, y1):y2, max(0, x1):x2]
-                res = DeepFace.represent(img_path=face_crop, model_name="Facenet512", detector_backend="skip", enforce_detection=False)
-                current_vec = np.array(res[0]["embedding"])
-                
-                # E. Truy vấn Supabase thay vì đọc file .pkl
-                response = supabase.table("faces").select("name, embedding").execute()
-                db_data = response.data 
-
-                best_name, min_dist = "Unknown", 1.0
-                for item in db_data:
-                    # Chuyển đổi vector từ database (list) thành numpy array
-                    v = np.array(item["embedding"])
-                    dist = cosine(current_vec, v)
-                    if dist < min_dist:
-                        min_dist, best_name = dist, item["name"]
-                
-                # F. Trả về kết quả
-                if min_dist < THRESHOLD_FACENET:
-                    return {
-                        "recognized": True, 
-                        "name": best_name, 
-                        "confidence": float(1 - min_dist), 
-                        "detected": True
-                    }
+        # Nhận diện: Thay vì đọc file .pkl, ta truy vấn từ Supabase
+        res = DeepFace.represent(img_path=face_crop, model_name="Facenet512", detector_backend="skip", enforce_detection=False)
+        current_vec = np.array(res[0]["embedding"])
         
-        return {"recognized": False, "detected": False}
-
+        # Truy vấn Supabase
+        response = supabase.table("faces").select("name, embedding").execute()
+        
+        # So sánh cosine với dữ liệu từ Supabase
+        best_name, min_dist = "Unknown", 1.0
+        for item in response.data:
+            v = np.array(item["embedding"])
+            dist = cosine(current_vec, v)
+            if dist < 0.35 and dist < min_dist:
+                min_dist, best_name = dist, item["name"]
+        
+        return {"recognized": True if best_name != "Unknown" else False, "name": best_name}
     except Exception as e:
-        print(f"[ERROR] {str(e)}")
-        return {"recognized": False, "detected": False, "error": str(e)}
+        return {"error": str(e)}
