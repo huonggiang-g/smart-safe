@@ -5,3 +5,6 @@ opencv-python-headless
 ultralytics
 numpy
 pydantic
+deepface
+tf-keras
+tensorflow-cpu
