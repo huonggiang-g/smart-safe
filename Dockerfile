@@ -14,8 +14,16 @@ COPY requirements.txt .
 
 # Cài đặt thư viện (nếu có lỗi, nó sẽ báo ngay tại đây trong build log)
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
+    pip install --no-cache-dir \
+    tensorflow \
+    tf-keras \
+    deepface \
+    ultralytics \
+    fastapi \
+    uvicorn \
+    opencv-python-headless \
+    scipy \
+    supabase
 # Sau khi cài xong thư viện mới copy toàn bộ code
 COPY . .
 
