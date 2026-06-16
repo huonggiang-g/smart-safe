@@ -12,7 +12,7 @@ WORKDIR /app
 # Đảm bảo copy requirements.txt trước để tận dụng Docker Cache
 COPY requirements.txt .
 
-# Cài đặt thư viện (nếu có lỗi, nó sẽ báo ngay tại đây trong build log)
+# Cài đặt thư viện
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
     tensorflow \
@@ -24,6 +24,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
     opencv-python-headless \
     scipy \
     supabase
+    
+RUN python3 -c "from deepface import DeepFace; DeepFace.build_model('Facenet512')"
+# Thiết lập biến môi trường để DeepFace lưu model vào thư mục /app/.deepface
+ENV DEEPFACE_HOME=/app
+# Tải model Facenet512 về trước để build thành một layer cố định trong image
+RUN python3 -c "from deepface import DeepFace; DeepFace.build_model('Facenet512')"
+# ------------------------------
+
 # Sau khi cài xong thư viện mới copy toàn bộ code
 COPY . .
 
