@@ -10,6 +10,16 @@ from scipy.spatial.distance import cosine
 from supabase import create_client
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
+import torch
+import warnings
+
+# Tắt cảnh báo weights_only và ép load theo kiểu cũ
+warnings.filterwarnings("ignore", category=FutureWarning)
+try:
+    # Đây là mẹo để ép torch chấp nhận file model cũ
+    torch.serialization.add_safe_globals([dict])
+except Exception:
+    pass
 
 app = FastAPI()
 
