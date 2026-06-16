@@ -1,8 +1,10 @@
 import torch
-# Patch để ép PyTorch chấp nhận load model cũ
 import sys
+
+# Patch để ép PyTorch chấp nhận load model cũ
 if hasattr(torch, 'serialization'):
     torch.serialization.add_safe_globals([dict])
+
 import cv2
 import numpy as np
 import base64
@@ -16,19 +18,22 @@ from supabase import create_client
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
 import warnings
+
+# Khởi tạo FastAPI
 app = FastAPI()
 print("DEBUG: app đã được khởi tạo thành công!")
-# 1. Khởi tạo Supabase
+
+# Kết nối Supabase
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
-# 2. Định nghĩa hằng số
+# Định nghĩa hằng số
 MODEL_FAS = 'models/2.7_80x80_MiniFASNetV2.pth'
 THRESHOLD_FACENET = 0.35
 
-# 3. Khởi tạo mô hình
+# Khởi tạo mô hình
 print("[INFO] Đang nạp model...")
 yolo_pose = YOLO('models/best.pt')
-yolo_pose.model.float()
+yolo_pose.model.float() 
 fas_predict = AntiSpoofPredict(device_id=-1)
 image_cropper = CropImage()
 print("[INFO] Khởi tạo hoàn tất!")
@@ -60,7 +65,7 @@ async def recognize(request: ImageRequest):
                 if float(pred[0][1]) < 0.85:
                     return {"recognized": False, "detected": True, "error": "Spoof detected"}
 
-                # Nhận diện (DeepFace) - PHẢI NẰM TRONG VÒNG LẶP ĐỂ CÓ face_crop
+                # Nhận diện (DeepFace)
                 face_crop = frame[max(0, y1):y2, max(0, x1):x2]
                 res = DeepFace.represent(img_path=face_crop, model_name="Facenet512", detector_backend="skip", enforce_detection=False)
                 current_vec = np.array(res[0]["embedding"])
