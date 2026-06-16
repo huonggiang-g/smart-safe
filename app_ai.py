@@ -27,6 +27,7 @@ THRESHOLD_FACENET = 0.35
 # 3. Khởi tạo mô hình
 print("[INFO] Đang nạp model...")
 yolo_pose = YOLO('models/best.pt')
+yolo_pose.model.float()
 fas_predict = AntiSpoofPredict(device_id=-1)
 image_cropper = CropImage()
 print("[INFO] Khởi tạo hoàn tất!")
