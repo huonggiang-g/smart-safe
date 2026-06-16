@@ -1,3 +1,8 @@
+import torch
+# Patch để ép PyTorch chấp nhận load model cũ
+import sys
+if hasattr(torch, 'serialization'):
+    torch.serialization.add_safe_globals([dict])
 import cv2
 import numpy as np
 import base64
@@ -10,18 +15,7 @@ from scipy.spatial.distance import cosine
 from supabase import create_client
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
-import torch
 import warnings
-
-# Tắt cảnh báo weights_only và ép load theo kiểu cũ
-warnings.filterwarnings("ignore", category=FutureWarning)
-try:
-    # Đây là mẹo để ép torch chấp nhận file model cũ
-    torch.serialization.add_safe_globals([dict])
-except Exception:
-    pass
-
-app = FastAPI()
 
 # 1. Khởi tạo Supabase
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
