@@ -16,7 +16,8 @@ from supabase import create_client
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
 import warnings
-
+app = FastAPI()
+print("DEBUG: app đã được khởi tạo thành công!")
 # 1. Khởi tạo Supabase
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
