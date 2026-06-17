@@ -57,13 +57,17 @@ class ImageRequest(BaseModel):
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
     try:
+        print(f"DEBUG: Nhận request mới. Độ dài base64: {len(request.image)}")
         # Decode ảnh
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
         nparr = np.frombuffer(img_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
+            print("ERROR: cv2.imdecode trả về None! Ảnh bị hỏng hoặc sai định dạng.")
             raise HTTPException(status_code=400, detail="Invalid image data")
+            
+        print(f"DEBUG: Decode thành công. Kích thước frame: {frame.shape}")
 
         # Detect mặt
         results = yolo_pose(frame, verbose=False)
