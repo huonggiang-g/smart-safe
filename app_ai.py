@@ -23,6 +23,15 @@ import warnings
 app = FastAPI()
 print("DEBUG: app đã được khởi tạo thành công!")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Hoặc thay bằng URL của trang web bạn
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Kết nối Supabase
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
