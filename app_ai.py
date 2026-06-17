@@ -1,10 +1,14 @@
 import torch
 import sys
 
-# Patch để ép PyTorch chấp nhận load model cũ
-if hasattr(torch, 'serialization'):
-    torch.serialization.add_safe_globals([dict])
+# MỞ KHÓA TOÀN CỤC: Ép torch.load mặc định luôn luôn là weights_only=False
+# Điều này vô hiệu hóa hoàn toàn chính sách bảo mật mới của PyTorch 2.6
+def patched_torch_load(*args, **kwargs):
+    kwargs['weights_only'] = False
+    return original_torch_load(*args, **kwargs)
 
+original_torch_load = torch.load
+torch.load = patched_torch_load
 import cv2
 import numpy as np
 import base64
