@@ -1,19 +1,10 @@
 import torch
-import sys
-
-# MỞ KHÓA TOÀN CỤC: Ép torch.load mặc định luôn luôn là weights_only=False
-# Điều này vô hiệu hóa hoàn toàn chính sách bảo mật mới của PyTorch 2.6
-def patched_torch_load(*args, **kwargs):
-    kwargs['weights_only'] = False
-    return original_torch_load(*args, **kwargs)
-
-original_torch_load = torch.load
-torch.load = patched_torch_load
 import cv2
 import numpy as np
 import base64
 import os
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from ultralytics import YOLO
 from deepface import DeepFace
@@ -21,63 +12,72 @@ from scipy.spatial.distance import cosine
 from supabase import create_client
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
-import warnings
 
-# Khởi tạo FastAPI
+# --- Patch torch để tránh lỗi bảo mật ---
+def patched_torch_load(*args, **kwargs):
+    kwargs['weights_only'] = False
+    return original_torch_load(*args, **kwargs)
+
+original_torch_load = torch.load
+torch.load = patched_torch_load
+
+# --- Khởi tạo App ---
 app = FastAPI()
-print("DEBUG: app đã được khởi tạo thành công!")
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Hoặc thay bằng URL của trang web bạn
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def root():
-    return {"message": "AI Service đang chạy bình thường! Hãy gửi POST request tới /recognize"}
-    
-# Kết nối Supabase
+# --- Khởi tạo Supabase ---
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
-# Định nghĩa hằng số
+# --- Biến toàn cục (Chưa nạp model) ---
+yolo_pose = None
+fas_predict = None
+image_cropper = None
 MODEL_FAS = 'models/2.7_80x80_MiniFASNetV2.pth'
 THRESHOLD_FACENET = 0.35
 
-# Khởi tạo mô hình
-print("[INFO] Đang nạp model...")
-yolo_pose = YOLO('models/best.pt')
-yolo_pose.model.float() 
-fas_predict = AntiSpoofPredict(device_id=-1)
-image_cropper = CropImage()
-print("[INFO] Khởi tạo hoàn tất!")
+# --- Hàm nạp model (Lazy Loading) ---
+def load_models():
+    global yolo_pose, fas_predict, image_cropper
+    if yolo_pose is None:
+        print("[INFO] Bắt đầu nạp model...")
+        yolo_pose = YOLO('models/best.pt')
+        yolo_pose.model.float()
+        fas_predict = AntiSpoofPredict(device_id=-1)
+        image_cropper = CropImage()
+        print("[INFO] Nạp model hoàn tất!")
+
+# --- Các route cơ bản ---
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    return {"message": "AI Service đang chạy!"}
 
 class ImageRequest(BaseModel):
     image: str
 
-@app.api_route("/debug", methods=["GET", "POST"])
-async def debug_endpoint():
-    return {"status": "ok", "message": "Server đã nhận request!"}
-
+# --- Route nhận diện chính ---
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
+    # Nạp model khi có request tới
+    load_models() 
+    
     try:
-        print(f"DEBUG: Nhận request mới. Độ dài base64: {len(request.image)}")
         # Decode ảnh
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
         nparr = np.frombuffer(img_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
-            print("ERROR: cv2.imdecode trả về None! Ảnh bị hỏng hoặc sai định dạng.")
             raise HTTPException(status_code=400, detail="Invalid image data")
-            
-        print(f"DEBUG: Decode thành công. Kích thước frame: {frame.shape}")
 
         # Detect mặt
         results = yolo_pose(frame, verbose=False)
@@ -88,7 +88,6 @@ async def recognize(request: ImageRequest):
                 # FAS (Chống giả mạo)
                 img_crop_fas = image_cropper.crop(frame, [x1, y1, x2-x1, y2-y1], 2.7, 80, 80)
                 pred = fas_predict.predict(img_crop_fas, MODEL_FAS)
-                
                 if float(pred[0][1]) < 0.85:
                     return {"recognized": False, "detected": True, "error": "Spoof detected"}
 
@@ -110,8 +109,7 @@ async def recognize(request: ImageRequest):
                 
                 return {"recognized": True if best_name != "Unknown" else False, "name": best_name}
         
-        #return {"recognized": False, "detected": False, "message": "No face detected"}
-        return {"recognized": True, "name": "Test"} # Test thử trả về JSON cứng
+        return {"recognized": False, "detected": False, "message": "No face detected"}
 
     except Exception as e:
         print(f"LỖI TẠI SERVER AI: {str(e)}") 
