@@ -39,4 +39,5 @@ RUN chmod +x download_models.sh && ./download_models.sh
 
 EXPOSE 8000
 ENV OMP_NUM_THREADS=1
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "app_ai:app", "--bind", "0.0.0.0:8000", "--timeout", "300", "--preload"]
+# Sửa dòng CMD thành:
+CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "app_ai:app", "--bind", "0.0.0.0:8000", "--timeout", "120", "--worker-tmp-dir", "/dev/shm"]
