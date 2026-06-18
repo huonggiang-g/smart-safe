@@ -1,40 +1,35 @@
-import base64
-import cv2
-import numpy as np
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-
-app = FastAPI()
-
-class ImageRequest(BaseModel):
-    image: str
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
-    # Bước 1: Kiểm tra dữ liệu thô
-    print(f"DEBUG: Nhận ảnh, độ dài: {len(request.image)}")
+    load_models() # Gọi hàm nạp model
     
     try:
-        # Bước 2: Decode cơ bản
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
         nparr = np.frombuffer(img_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # Bước 3: Kiểm tra ảnh có rỗng không
         if frame is None:
             return {"status": "error", "message": "cv2 decode failed"}
+
+        # 1. Phát hiện khuôn mặt bằng YOLO
+        results = yolo_pose(frame, verbose=False)
+        detected = False
         
-        # Bước 4: Nếu tới đây được, chứng tỏ ảnh hợp lệ
-        # Trả về kích thước ảnh để biết server đã xử lý thành công
-        return {
-            "status": "success", 
-            "frame_shape": frame.shape,
-            "message": "Ảnh hợp lệ, server AI hoạt động tốt!"
-        }
+        for result in results:
+            if len(result.boxes) > 0:
+                detected = True
+                # Lấy tọa độ khuôn mặt đầu tiên tìm thấy
+                box = result.boxes[0]
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                
+                # Trả về kết quả: đã tìm thấy khuôn mặt, kèm tọa độ để web hiển thị (nếu cần)
+                return {
+                    "status": "success",
+                    "detected": True,
+                    "box": [x1, y1, x2, y2],
+                    "message": "YOLO đã tìm thấy khuôn mặt!"
+                }
         
+        return {"status": "success", "detected": False, "message": "Không tìm thấy khuôn mặt"}
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
