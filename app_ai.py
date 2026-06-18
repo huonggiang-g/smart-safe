@@ -36,6 +36,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {"message": "AI Service đang chạy bình thường! Hãy gửi POST request tới /recognize"}
+    
 # Kết nối Supabase
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
