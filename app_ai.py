@@ -26,7 +26,9 @@ import warnings
 # Khởi tạo FastAPI
 app = FastAPI()
 print("DEBUG: app đã được khởi tạo thành công!")
-
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
