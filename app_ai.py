@@ -58,6 +58,10 @@ print("[INFO] Khởi tạo hoàn tất!")
 class ImageRequest(BaseModel):
     image: str
 
+@app.api_route("/debug", methods=["GET", "POST"])
+async def debug_endpoint():
+    return {"status": "ok", "message": "Server đã nhận request!"}
+
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
     try:
