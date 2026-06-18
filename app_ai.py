@@ -12,66 +12,46 @@ from scipy.spatial.distance import cosine
 from supabase import create_client
 from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
+import gc
 
-# --- Patch torch để tránh lỗi bảo mật ---
+# Patch torch
 def patched_torch_load(*args, **kwargs):
     kwargs['weights_only'] = False
     return original_torch_load(*args, **kwargs)
-
 original_torch_load = torch.load
 torch.load = patched_torch_load
 
-# --- Khởi tạo App ---
 app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- Khởi tạo Supabase ---
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
-# --- Biến toàn cục (Chưa nạp model) ---
+# Biến toàn cục
 yolo_pose = None
 fas_predict = None
 image_cropper = None
-MODEL_FAS = 'models/2.7_80x80_MiniFASNetV2.pth'
-THRESHOLD_FACENET = 0.35
 
-# --- Hàm nạp model (Lazy Loading) ---
 def load_models():
     global yolo_pose, fas_predict, image_cropper
     if yolo_pose is None:
-        print("[INFO] Bắt đầu nạp model...")
+        print("[INFO] Đang nạp model (Lazy Loading)...")
         yolo_pose = YOLO('models/best.pt')
         yolo_pose.model.float()
         fas_predict = AntiSpoofPredict(device_id=-1)
         image_cropper = CropImage()
         print("[INFO] Nạp model hoàn tất!")
 
-# --- Các route cơ bản ---
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
-@app.get("/")
-async def root():
-    return {"message": "AI Service đang chạy!"}
-
 class ImageRequest(BaseModel):
     image: str
 
-# --- Route nhận diện chính ---
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
-    # Nạp model khi có request tới
-    load_models() 
-    
+    load_models()
     try:
-        # Decode ảnh
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
         nparr = np.frombuffer(img_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -79,38 +59,32 @@ async def recognize(request: ImageRequest):
         if frame is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
 
-        # Detect mặt
         results = yolo_pose(frame, verbose=False)
         for result in results:
             for box in result.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 
-                # FAS (Chống giả mạo)
+                # FAS
                 img_crop_fas = image_cropper.crop(frame, [x1, y1, x2-x1, y2-y1], 2.7, 80, 80)
-                pred = fas_predict.predict(img_crop_fas, MODEL_FAS)
+                pred = fas_predict.predict(img_crop_fas, 'models/2.7_80x80_MiniFASNetV2.pth')
                 if float(pred[0][1]) < 0.85:
                     return {"recognized": False, "detected": True, "error": "Spoof detected"}
 
-                # Nhận diện (DeepFace)
+                # DeepFace - Dùng VGG-Face cho nhẹ RAM
                 face_crop = frame[max(0, y1):y2, max(0, x1):x2]
-                res = DeepFace.represent(img_path=face_crop, model_name="Facenet512", detector_backend="skip", enforce_detection=False)
+                res = DeepFace.represent(img_path=face_crop, model_name="VGG-Face", detector_backend="skip", enforce_detection=False)
                 current_vec = np.array(res[0]["embedding"])
                 
-                # Truy vấn Supabase
                 response = supabase.table("faces").select("name, embedding").execute()
-                
-                # So sánh cosine
-                best_name, min_dist = "Unknown", 1.0
+                best_name, min_dist = "Unknown", 0.4 # Ngưỡng VGG-Face thường khắt khe hơn
                 for item in response.data:
-                    v = np.array(item["embedding"])
-                    dist = cosine(current_vec, v)
-                    if dist < THRESHOLD_FACENET and dist < min_dist:
+                    dist = cosine(current_vec, np.array(item["embedding"]))
+                    if dist < min_dist:
                         min_dist, best_name = dist, item["name"]
                 
+                gc.collect()
                 return {"recognized": True if best_name != "Unknown" else False, "name": best_name}
         
         return {"recognized": False, "detected": False, "message": "No face detected"}
-
     except Exception as e:
-        print(f"LỖI TẠI SERVER AI: {str(e)}") 
         return {"error": str(e)}
