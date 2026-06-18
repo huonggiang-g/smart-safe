@@ -1,43 +1,18 @@
+# Base image nhẹ, ổn định
 FROM python:3.9-slim
 
-# Cài đặt các thư viện hệ thống cần thiết
-RUN apt-get update && apt-get install -y \
-    libgl1 \
-    libglib2.0-0 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
+# Thiết lập thư mục làm việc
 WORKDIR /app
 
-# Đảm bảo copy requirements.txt trước để tận dụng Docker Cache
-COPY requirements.txt .
-
-# Cài đặt thư viện
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-    tensorflow \
-    tf-keras \
-    deepface \
-    ultralytics \
-    fastapi \
-    uvicorn \
-    opencv-python-headless \
-    scipy \
-    supabase
-    
-RUN python3 -c "from deepface import DeepFace; DeepFace.build_model('Facenet512')"
-# Thiết lập biến môi trường để DeepFace lưu model vào thư mục /app/.deepface
-ENV DEEPFACE_HOME=/app
-# Tải model Facenet512 về trước để build thành một layer cố định trong image
-RUN python3 -c "from deepface import DeepFace; DeepFace.build_model('Facenet512')"
-# ------------------------------
-
-# Sau khi cài xong thư viện mới copy toàn bộ code
+# Copy toàn bộ code vào container
 COPY . .
 
-RUN chmod +x download_models.sh && ./download_models.sh
+# Cài đặt các thư viện (đảm bảo file requirements.txt của bạn đầy đủ)
+RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 8000
-ENV OMP_NUM_THREADS=1
-# Sửa dòng CMD thành:
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "app_ai:app", "--bind", "0.0.0.0:8000", "--timeout", "120"]
+# Cấu hình Gunicorn (Chuẩn cho gói Standard)
+# -w 2: 2 workers để xử lý song song
+# -k uvicorn.workers.UvicornWorker: Engine của FastAPI
+# --preload: Nạp model 1 lần duy nhất vào RAM (cực quan trọng)
+# --timeout 120: Tránh lỗi timeout khi nhận diện ảnh nặng
+CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "app_ai:app", "--bind", "0.0.0.0:8000", "--timeout", "120", "--preload"]
