@@ -12,7 +12,7 @@ from deepface import DeepFace
 from scipy.spatial.distance import cosine
 from supabase import create_client
 
-# Patch torch
+# Patch torch để tránh lỗi bảo mật
 def patched_torch_load(*args, **kwargs):
     kwargs['weights_only'] = False
     return original_torch_load(*args, **kwargs)
@@ -30,10 +30,11 @@ yolo_pose = None
 def load_models():
     global yolo_pose
     if yolo_pose is None:
-        print("[INFO] Đang nạp YOLO...")
+        print("[INFO] Đang nạp model YOLO...")
         yolo_pose = YOLO('models/best.pt')
-        yolo_pose.model.float()
-        print("[INFO] Nạp YOLO hoàn tất!")
+        # TỐI ƯU RAM: Chuyển model sang nửa độ chính xác (FP16) để tiết kiệm RAM
+        yolo_pose.model.half() 
+        print("[INFO] Nạp model hoàn tất!")
 
 @app.get("/health")
 async def health():
@@ -44,7 +45,7 @@ class ImageRequest(BaseModel):
 
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
-    load_models()
+    load_models() 
     try:
         # Decode ảnh
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
@@ -57,33 +58,32 @@ async def recognize(request: ImageRequest):
         for result in results:
             for box in result.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-                
-                # 2. VGG-Face: Định danh (không FAS)
                 face_crop = frame[max(0, y1):y2, max(0, x1):x2]
                 
-                # DeepFace nạp model khi gọi, nên nếu RAM thiếu, nó sẽ báo ngay tại đây
+                # Kiểm tra kích thước mặt để tránh xử lý nhiễu
+                if face_crop.shape[0] < 50 or face_crop.shape[1] < 50: continue
+
+                # 2. VGG-Face: Định danh (Model nhẹ nhất trong DeepFace)
+                # TỐI ƯU RAM: Dùng skip detector vì đã có YOLO rồi
                 res = DeepFace.represent(img_path=face_crop, model_name="VGG-Face", detector_backend="skip", enforce_detection=False)
                 current_vec = np.array(res[0]["embedding"])
                 
                 # 3. Supabase: So sánh
                 response = supabase.table("faces").select("name, embedding").execute()
-                best_name, min_dist = "Người lạ", 0.4 
+                best_name, min_dist = "Người lạ", 0.35 # Ngưỡng chặt chẽ hơn
                 for item in response.data:
                     dist = cosine(current_vec, np.array(item["embedding"]))
                     if dist < min_dist:
                         min_dist, best_name = dist, item["name"]
                 
-                # Dọn dẹp RAM cực kỳ quan trọng
+                # GIẢI PHÓNG RAM CỰC KỲ QUAN TRỌNG
                 del res, current_vec
                 gc.collect()
                 
-                return {
-                    "recognized": True if best_name != "Người lạ" else False, 
-                    "name": best_name, 
-                    "confidence": float(1 - min_dist)
-                }
+                return {"recognized": True if best_name != "Người lạ" else False, "name": best_name, "confidence": float(1 - min_dist)}
         
         return {"recognized": False, "message": "Không thấy mặt"}
     except Exception as e:
         print(f"LỖI: {str(e)}")
+        gc.collect() # Dọn dẹp cả khi có lỗi
         return {"status": "error", "message": str(e)}
