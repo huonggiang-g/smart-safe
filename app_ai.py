@@ -65,7 +65,7 @@ async def debug_endpoint():
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
     try:
-        Sprint(f"DEBUG: Nhận request mới. Độ dài base64: {len(request.image)}")
+        print(f"DEBUG: Nhận request mới. Độ dài base64: {len(request.image)}")
         # Decode ảnh
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
         nparr = np.frombuffer(img_data, np.uint8)
