@@ -65,7 +65,7 @@ async def debug_endpoint():
 @app.post("/recognize")
 async def recognize(request: ImageRequest):
     try:
-        print(f"DEBUG: Nhận request mới. Độ dài base64: {len(request.image)}")
+        Sprint(f"DEBUG: Nhận request mới. Độ dài base64: {len(request.image)}")
         # Decode ảnh
         img_data = base64.b64decode(request.image.split(',')[-1] if ',' in request.image else request.image)
         nparr = np.frombuffer(img_data, np.uint8)
@@ -108,7 +108,9 @@ async def recognize(request: ImageRequest):
                 
                 return {"recognized": True if best_name != "Unknown" else False, "name": best_name}
         
-        return {"recognized": False, "detected": False, "message": "No face detected"}
+        #return {"recognized": False, "detected": False, "message": "No face detected"}
+        return {"recognized": True, "name": "Test"} # Test thử trả về JSON cứng
 
     except Exception as e:
+        print(f"LỖI TẠI SERVER AI: {str(e)}") 
         return {"error": str(e)}
