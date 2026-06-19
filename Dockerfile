@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     pip install tf-keras
 
 # Dùng 1 Worker để cực kỳ an toàn về RAM cho gói Standard
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "app_ai:app", "--bind", "0.0.0.0:8000", "--timeout", "120", "--preload"]
+CMD ["sh", "-c", "gunicorn -w 1 -k uvicorn.workers.UvicornWorker app_ai:app --bind 0.0.0.0:$PORT --timeout 120 --preload"]
