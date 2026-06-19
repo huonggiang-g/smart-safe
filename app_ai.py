@@ -15,6 +15,9 @@ from src.anti_spoof_predict import AntiSpoofPredict
 from src.generate_patches import CropImage
 
 app = FastAPI()
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
