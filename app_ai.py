@@ -13,8 +13,8 @@ yolo_pose = YOLO('resources/detection_model/best.pt')
 fas_predict = AntiSpoofPredict(device_id=-1)
 image_cropper = CropImage()
 
-@app.post("/process-face")
-async def process_face(request: Request):
+@app.post("/recognize") 
+async def recognize(request: Request):
     try:
         data = await request.json()
         img_data = base64.b64decode(data["image"])
