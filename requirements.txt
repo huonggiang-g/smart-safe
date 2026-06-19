@@ -10,3 +10,4 @@ supabase
 pydantic
 torch
 torchvision
+tf-keras
